@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300">
+  <rect width="480" height="300" rx="12" fill="#17191e"/>
+  <path d="M12 0h118v300H12Q0 300 0 288V12Q0 0 12 0" fill="#23262d"/>
+  <rect x="142" y="38" width="326" height="250" rx="8" fill="#101216"/>
+  <text x="18" y="35" fill="#e2e4e9" font-family="sans-serif" font-size="16">Herdr</text>
+  <text x="18" y="70" fill="#9298a5" font-family="sans-serif" font-size="12">Spaces</text>
+  <rect x="10" y="237" width="110" height="28" rx="5" fill="#383e4a"/>
+  <text x="18" y="255" fill="#e2e4e9" font-family="sans-serif" font-size="12">Mission Control</text>
+  <text x="251" y="167" fill="#e2e4e9" font-family="sans-serif" font-size="20">Hello world</text>
+</svg>

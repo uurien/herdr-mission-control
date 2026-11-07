@@ -1,0 +1,8 @@
+.plans/
+AGENTS.md
+gpui-kit.d.ts
+.DS_Store
+node_modules/
+.env
+.env.*
+*.backup-*
