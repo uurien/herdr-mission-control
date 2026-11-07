@@ -1,40 +1,44 @@
 # Herdr Mission Control
 
-Monitor nativo de los agentes de Codex y Claude Code del space que contiene el panel.
-Esta primera entrega utiliza únicamente datos de Herdr, sin hooks ni datos simulados.
+A native monitor for Codex and Claude Code agents in the space containing the panel.
+This first release uses only Herdr data, without hooks or simulated data.
 
-Muestra programa, título comunicado, estado, terminal, pestaña y helpers registrados en Core.
-Seleccionar una fila muestra su detalle; **Ver terminal en Herdr** abre esa terminal.
-Los helpers no se duplican entre la lista de agentes y la de terminales.
+It shows the program, reported title, status, terminal, tab, and helpers registered in Core.
+Select a row to see its details; **Ver terminal en Herdr** (View terminal in Herdr) opens its
+terminal.
+Helpers listed in both the agent and terminal inventories appear only once.
 
-Las tools, skills y subagentes internos de los proveedores se incorporarán en la siguiente entrega.
-La actividad del tab no representa tiempo acumulado del agente. El estado puede aparecer como
-**Sin estado** si el programa no lo comunica, aunque Herdr identifique el proceso.
+Tools, skills, and internal provider subagents are planned for the next release.
+Tab activity does not represent accumulated agent time. The status may read **Sin estado**
+(No reported status) when the program does not report one, even if Herdr identifies the process.
+The panel currently uses Spanish labels.
 
-## Archivos
+## Files
 
-- `mods/mission-control/main.js`: contenido del panel.
-- `mods/mission-control/herdr-model.js`: pertenencia al space, inventario y parentesco.
-- `mods/mission-control/ui.js`: elementos nativos de la lista y el detalle.
-- `mods/mission-control/mod.json`: nombre y ubicación inicial del mod.
-- `mods/mission-control-launcher/`: botón para abrir el panel desde la barra lateral.
-- `layouts/mission-control.json`: copia personal del layout de Herdr con ese botón.
+- `mods/mission-control/main.js`: panel content.
+- `mods/mission-control/herdr-model.js`: space membership, inventory, and parent relationships.
+- `mods/mission-control/ui.js`: native list and detail components.
+- `mods/mission-control/mod.json`: mod name and initial placement.
+- `mods/mission-control-launcher/`: sidebar button that opens the panel.
+- `layouts/mission-control.json`: a custom Herdr layout containing that button.
 
-## Abrir desde Herdr
+## Open from Herdr
 
-En el layout `mission-control`, pulsar **Mission Control** abajo a la izquierda, encima de
-**Settings**. Abre una pestaña asociada al space seleccionado. Cerrar la pestaña conserva el botón.
-Cambiar de space no cambia el contexto de un panel ya abierto. La selección se conserva al
-recargar la misma instancia del panel.
+In the `mission-control` layout, click **Mission Control** at the bottom left, above **Settings**.
+It opens a tab associated with the selected space. Closing the tab leaves the sidebar button in
+place.
+Switching spaces does not change the context of an existing panel. Selection is preserved when
+reloading the same panel instance.
 
-Las pestañas del Hello world anterior no tienen contexto: cerrarlas y abrir el panel desde el botón.
+Tabs from the earlier Hello world version have no space context: close them and reopen from the
+button.
 
-Si se cambia de layout, volver a `mission-control` desde Settings o recorrer los layouts con
-`Cmd+Shift+L` en macOS. El layout original de Herdr también sigue disponible.
+If you switch layouts, return to `mission-control` through Settings or cycle through layouts with
+`Cmd+Shift+L` on macOS. The original Herdr layout remains available.
 
-## Comprobar el mod
+## Check the mods
 
-Desde la raíz de este proyecto, sin instalar dependencias:
+Run from the project root. No dependency installation is required:
 
 ```sh
 npm test
@@ -42,10 +46,11 @@ herdr-app check mods/mission-control
 herdr-app check mods/mission-control-launcher
 ```
 
-## Instalar y abrir
+## Install and open
 
-Herdr carga los mods desde `~/.config/herdr-app/mods/`. Para una primera instalación, comprobar
-que los nombres de destino no existan y copiar los dos mods y el layout personal:
+Herdr loads mods from `~/.config/herdr-app/mods/`. For a first installation, make sure the
+destination
+names do not already exist, then copy both mods and the custom layout:
 
 ```sh
 cp -R mods/mission-control ~/.config/herdr-app/mods/
@@ -54,27 +59,28 @@ cp layouts/mission-control.json layouts/mission-control.svg ~/.config/herdr-app/
 herdr-app do layout.switch --name mission-control
 ```
 
-El último comando activa el layout con el botón. `place: "none"` en los mods deja que el layout
-decida dónde se muestran. Usar el botón para que el launcher pase el ID del space al panel.
+The last command activates the layout with the sidebar button. Setting `place: "none"` in the mods
+lets the layout control their placement. Open the panel with the button so the launcher passes the
+space ID to it.
 
-Para actualizar una instalación propia con cambios del proyecto:
+To update an existing installation with project changes:
 
 ```sh
 cp mods/mission-control/*.js ~/.config/herdr-app/mods/mission-control/
 cp mods/mission-control-launcher/main.js ~/.config/herdr-app/mods/mission-control-launcher/
 ```
 
-Herdr recarga el mod al guardar el archivo instalado. Para revisar errores:
+Herdr reloads a mod when its installed file is saved. To check for errors:
 
 ```sh
 herdr-app status
 ```
 
-Para retirar la prueba, cerrar su pestaña y volver al layout original. Después, eliminar las
-carpetas instaladas `mods/mission-control` y `mods/mission-control-launcher`, y los archivos
-`layouts/mission-control.json` y `layouts/mission-control.svg` dentro de `~/.config/herdr-app`.
-El código del proyecto permanece aquí.
+To uninstall, close the panel tab and switch back to the original layout. Then remove the installed
+`mods/mission-control` and `mods/mission-control-launcher` directories, along with
+`layouts/mission-control.json` and `layouts/mission-control.svg`, from `~/.config/herdr-app`.
+The project source remains in this directory.
 
-## Licencia
+## License
 
 [MIT](LICENSE), copyright © 2026 Ugaitz Urien.
