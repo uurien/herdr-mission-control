@@ -1,5 +1,6 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
+import { groupTools, toolGroupKey } from './codex-tool-groups.js';
 
 function button(id, label, onClick, colors) {
   return div().id(id).px(10).py(7).rounded(6).bg(colors.surface).text_size(12)
@@ -10,6 +11,37 @@ function section(label, colors) {
     .child(div().text_size(12).text_color(colors.muted).child(label));
 }
 const dateLabel = value => value ? String(value).replace('T', ' ').replace(/\.\d+Z$/, ' UTC') : '—';
+
+function toolGroups(agent, kind, tools, colors, options) {
+  const list = v_flex().gap(6).min_w(0);
+  for (const group of groupTools(tools)) {
+    const key = toolGroupKey(agent.id, kind, group.id);
+    const expanded = Boolean(options.expandedToolGroups?.[key]);
+    const detail = kind === 'used' ? ` · ${group.count} ${group.count === 1 ? 'llamada' : 'llamadas'}` : '';
+    const row = v_flex().gap(8).min_w(0)
+      .child(v_flex().id(`tool-group:${key}`).p(10).gap(3).rounded(6).bg(colors.surface)
+        .cursor_pointer().hover(s => s.bg(colors.hover))
+        .on_click((_event, cx) => options.onToggleToolGroup?.(key, cx))
+        .child(h_flex().gap(8).items_center()
+          .child(div().text_size(12).text_color(colors.muted).child(expanded ? '▾' : '▸'))
+          .child(div().text_size(13).child(group.label)))
+        .child(div().text_size(11).text_color(colors.muted)
+          .child(`${group.tools.length} ${group.tools.length === 1 ? 'tool' : 'tools'}${detail}`)));
+    if (expanded) {
+      const contents = v_flex().pl(12).pb(5).gap(10).min_w(0);
+      for (const tool of group.tools) {
+        const name = kind === 'used' ? `${tool.name} · ${tool.count}` : tool.name;
+        const item = v_flex().gap(3).min_w(0).child(div().text_size(12).child(name));
+        if (kind === 'used') item.child(div().text_size(11).text_color(colors.muted)
+          .child(`Última: ${dateLabel(tool.lastObservedAt)}`));
+        contents.child(item);
+      }
+      row.child(contents);
+    }
+    list.child(row);
+  }
+  return list;
+}
 
 export function codexDetail(agent, colors, options = {}) {
   const root = v_flex().gap(16).min_w(0);
@@ -72,14 +104,12 @@ export function codexDetail(agent, colors, options = {}) {
   }
   const declared = section('Tools declaradas en la sesión', colors);
   declared.child(div().text_size(11).text_color(colors.muted).child('Las declaraciones no garantizan un inventario completo o vigente.'));
-  for (const tool of data.tools.declared) declared.child(div().text_size(12).child(tool.name));
+  declared.child(toolGroups(agent, 'declared', data.tools.declared, colors, options));
   if (!data.tools.declared.length) declared.child(div().text_size(12).text_color(colors.muted).child('Sin declaraciones registradas.'));
   root.child(declared);
   const used = section('Tools utilizadas', colors);
   used.child(div().text_size(11).text_color(colors.muted).child('Intentos de llamada, independientemente del resultado.'));
-  for (const tool of data.tools.used) used.child(v_flex().gap(2)
-    .child(div().text_size(12).child(`${tool.name} · ${tool.count}`))
-    .child(div().text_size(10).text_color(colors.muted).child(`Última: ${dateLabel(tool.lastObservedAt)}`)));
+  used.child(toolGroups(agent, 'used', data.tools.used, colors, options));
   if (!data.tools.used.length) used.child(div().text_size(12).text_color(colors.muted).child('Sin llamadas confirmadas en el historial analizado.'));
   root.child(used);
   const skills = section('Skills cargadas', colors);

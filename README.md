@@ -46,6 +46,10 @@ MCP calls recorded as structured completion events appear as `server.tool`, such
 `context7.query-docs` or `playwright.browser_tabs`, including calls made inside `exec`.
 The outer `exec` is counted separately. Tool names mentioned in scripts or output do not prove a
 call. An analyzer update rebuilds older cached histories so previously missed calls can reappear.
+Both tool lists are grouped into collapsible provider sections, such as Playwright, Context7,
+Colaboración and Funciones. Headers show distinct tool totals and, for used tools, total calls.
+Expand a provider to see local tool names, individual counts and last-call times. Expansion is
+kept separately for each agent and list while the panel stays open.
 
 Supported skill evidence includes literal `cat` reads, including chains of `cat` joined with `&&`,
 through recorded `exec_command` calls. A single literal `text(await tools.exec_command({...}));`
@@ -82,6 +86,7 @@ continues to work.
 - `mods/mission-control/herdr-model.js`: space membership, inventory, and parent relationships.
 - `mods/mission-control/ui.js`: native list and detail components.
 - `mods/mission-control/codex-detail.js`: tools, skills and session selection components.
+- `mods/mission-control/codex-tool-groups.js`: provider grouping and display-name aliases.
 - `mods/mission-control/codex-session-reader.mjs`: local Node.js reader and metadata cache.
 - `mods/mission-control/codex-session-watch.mjs`: bounded file notifications and gap detection.
 - `mods/mission-control/codex-session-model.js`: tool calls, declarations and skill evidence.

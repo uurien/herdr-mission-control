@@ -22,7 +22,8 @@ const detailSource = (await readFile(new URL('../mods/mission-control/codex-deta
   .replace(/^import .*;\n/gm, '').replace('export function codexDetail', 'function codexDetail');
 const uiSource = (await readFile(new URL('../mods/mission-control/ui.js', import.meta.url), 'utf8'))
   .replace(/^import .*;\n/gm, '');
-const ui = await import(`data:text/javascript;base64,${Buffer.from(builder + detailSource + uiSource).toString('base64')}`);
+const groupingImport = `import { groupTools, toolGroupKey } from '${new URL('../mods/mission-control/codex-tool-groups.js', import.meta.url).href}';\n`;
+const ui = await import(`data:text/javascript;base64,${Buffer.from(groupingImport + builder + detailSource + uiSource).toString('base64')}`);
 function textOf(element) {
   return typeof element === 'string' ? element : (element?.children || []).map(textOf).join('\n');
 }
@@ -58,4 +59,35 @@ test('automatic associations explain the match and make manual selection an opti
   assert.ok(textOf(rendered).includes('Detectada por nombre y carpeta'));
   assert.ok(textOf(rendered).includes('Corregir vinculación'));
   assert.ok(!textOf(rendered).includes('Desvincular sesión'));
+});
+
+function findById(element, id) {
+  if (!element || typeof element !== 'object') return null;
+  if (element._id === id) return element;
+  for (const child of element.children) { const found = findById(child, id); if (found) return found; }
+  return null;
+}
+
+test('provider groups collapse long tool lists and expand without mixing declared and used sections', () => {
+  const root = { id: 'root', sessionId: 'thread', provider: 'codex', status: 'working', sessionData: {
+    tools: { declared: [{ name: 'mcp__context7__query_docs' }, { name: 'mcp__context7__resolve_library_id' }],
+      used: [{ name: 'context7.query-docs', count: 5 }, { name: 'context7.resolve-library-id', count: 3 }] }, skills: [],
+  } };
+  const expandedToolGroups = {};
+  const usedKey = JSON.stringify(['root', 'used', 'context7']);
+  const options = { expandedToolGroups, onToggleToolGroup: key => { expandedToolGroups[key] = !expandedToolGroups[key]; } };
+  const render = () => ui.agentDetail(root, { agents: [root] }, colors, () => {}, true, options);
+  const closed = render();
+  assert.ok(textOf(closed).includes('Context7'));
+  assert.ok(textOf(closed).includes('8 llamadas'));
+  assert.ok(!textOf(closed).includes('query-docs'));
+  const toggle = findById(closed, `tool-group:${usedKey}`);
+  assert.ok(toggle);
+  toggle.click({}, {});
+  const open = render();
+  assert.ok(textOf(open).includes('query-docs · 5'));
+  assert.ok(textOf(open).includes('resolve-library-id · 3'));
+  assert.ok(!expandedToolGroups[JSON.stringify(['root', 'declared', 'context7'])]);
+  findById(open, `tool-group:${usedKey}`).click({}, {});
+  assert.ok(!textOf(render()).includes('query-docs'));
 });
