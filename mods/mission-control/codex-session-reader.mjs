@@ -5,7 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { createInterface } from 'node:readline';
-import { createSessionState, consumeSessionEvent, sessionSummary } from './codex-session-model.js';
+import { SESSION_MODEL_VERSION, createSessionState, consumeSessionEvent, sessionSummary } from './codex-session-model.js';
 import { waitForSessionChanges } from './codex-session-watch.mjs';
 import { resolveSessionLinks } from './codex-session-linker.js';
 
@@ -51,10 +51,12 @@ async function tailHash(file, offset) {
   } finally { await handle.close(); }
 }
 async function updateFile(file, info, entry, stats) {
-  const unchanged = entry && entry.ino === info.ino && entry.size === info.size && entry.mtime === info.mtimeMs;
+  const unchanged = entry && entry.state?.version === SESSION_MODEL_VERSION &&
+    entry.ino === info.ino && entry.size === info.size && entry.mtime === info.mtimeMs;
   if (unchanged) return entry;
   const first = await firstLine(file);
-  if (!entry || entry.ino !== info.ino || info.size < entry.offset || entry.firstHash !== first.hash ||
+  if (!entry || entry.state?.version !== SESSION_MODEL_VERSION || entry.ino !== info.ino ||
+      info.size < entry.offset || entry.firstHash !== first.hash ||
       entry.tailHash !== await tailHash(file, entry.offset)) {
     entry = { ino: info.ino, firstHash: first.hash, meta: first.row.payload,
       offset: 0, state: createSessionState(), tailHash: '' };

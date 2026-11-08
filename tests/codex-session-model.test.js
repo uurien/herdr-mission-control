@@ -122,3 +122,47 @@ test('shell comments and tilde expansion cannot confirm fictional file paths', (
   ]);
   assert.deepEqual(result.skills, []);
 });
+
+function mcp(id, server, tool, ordinal, extra = {}) {
+  return event('event_msg', { type: 'item_completed', item: {
+    type: 'McpToolCall', id, server, tool, arguments: { query: 'PRIVATE QUERY' },
+    status: 'completed', result: { content: 'PRIVATE RESULT' }, ...extra,
+  } }, ordinal);
+}
+
+test('counts real structured Context7 and Playwright calls inside exec wrappers', () => {
+  const rows = [meta()];
+  for (const [i, server, tool] of [[1, 'context7', 'resolve-library-id'], [2, 'context7', 'query-docs'], [3, 'playwright', 'browser_tabs']]) {
+    rows.push(event('response_item', { type: 'custom_tool_call', call_id: `outer-${i}`, name: 'exec', input: 'text(await tools.some_tool({}));' }));
+    rows.push(mcp(`exec-${i}`, server, tool));
+  }
+  const result = analyzeCodexSession(rows);
+  assert.deepEqual(result.tools.used.filter(t => t.name !== 'exec').map(t => [t.name, t.count]), [
+    ['context7.resolve-library-id', 1], ['context7.query-docs', 1], ['playwright.browser_tabs', 1],
+  ]);
+  assert.equal(result.tools.used.find(t => t.name === 'exec').count, 3);
+  assert.equal(result.tools.declared.length, 0);
+  assert.ok(!JSON.stringify(result).includes('PRIVATE'));
+});
+
+test('deduplicates MCP receipts by event id and counts failed attempts', () => {
+  const result = analyzeCodexSession([meta(), mcp('one', 'context7', 'query-docs'),
+    mcp('one', 'context7', 'query-docs'), mcp('two', 'context7', 'query-docs', null, { status: 'failed' })]);
+  assert.equal(result.tools.used[0]?.name, 'context7.query-docs');
+  assert.equal(result.tools.used[0]?.count, 2);
+});
+
+test('MCP receipts respect child history boundaries and do not infer calls from source text', () => {
+  const result = analyzeCodexSession([meta('child', { parent_thread_id: 'root', subagent_history_start_ordinal: 5 }),
+    mcp('parent', 'context7', 'query-docs', 2), mcp('child', 'playwright', 'browser_tabs', 6),
+    event('response_item', { type: 'custom_tool_call', call_id: 'code', name: 'exec', input: 'if (false) { await tools.mcp__context7__query_docs({}); }' }, 7)]);
+  assert.deepEqual(result.tools.used.map(t => t.name), ['playwright.browser_tabs', 'exec']);
+});
+
+test('direct call and MCP receipt sharing an id count once in either order', () => {
+  const direct = call('same', 'mcp__context7__query_docs', {});
+  for (const events of [[direct, mcp('same', 'context7', 'query-docs')], [mcp('same', 'context7', 'query-docs'), direct]]) {
+    const result = analyzeCodexSession([meta(), ...events]);
+    assert.equal(result.tools.used.reduce((n, t) => n + t.count, 0), 1);
+  }
+});

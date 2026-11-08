@@ -42,6 +42,11 @@ Only nodes with a confirmed terminal offer **Ver terminal en Herdr**.
   Catalog entries, mentions, partial reads and failed calls do not count. Application of a skill's
   instructions and the quality of the agent's work are not evaluated.
 
+MCP calls recorded as structured completion events appear as `server.tool`, such as
+`context7.query-docs` or `playwright.browser_tabs`, including calls made inside `exec`.
+The outer `exec` is counted separately. Tool names mentioned in scripts or output do not prove a
+call. An analyzer update rebuilds older cached histories so previously missed calls can reappear.
+
 Supported skill evidence includes literal `cat` reads, including chains of `cat` joined with `&&`,
 through recorded `exec_command` calls. A single literal `text(await tools.exec_command({...}));`
 wrapper is also supported. Scripts with dynamic commands, arbitrary JavaScript, pipelines and

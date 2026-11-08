@@ -1,8 +1,10 @@
 import path from 'node:path';
 import { wrappedExec, skillReadPaths, unwrapResult, completeRead } from './codex-read-evidence.js';
 
+export const SESSION_MODEL_VERSION = 2;
+
 export function createSessionState() {
-  return { version: 1, identity: null, cwd: null, boundary: null, attribution: true,
+  return { version: SESSION_MODEL_VERSION, identity: null, cwd: null, boundary: null, attribution: true,
     partial: false, diagnostics: [], declared: {}, used: {}, skills: {}, pending: {},
     processes: {}, seen: {}, relations: {}, status: 'unknown', statusAt: null, line: 0 };
 }
@@ -76,6 +78,16 @@ export function consumeSessionEvent(s, row, evidence = null) {
   if (row.type === 'compacted') { mark(s, 'compacted_history'); return; }
   if (row.type === 'turn_context') { s.cwd = p.cwd || s.cwd; return; }
   if (row.type === 'event_msg') {
+    const item = p.item;
+    // Exec exposes real nested MCP calls as structured receipts, separate from response_item.
+    // Read identity only: arguments/results may contain prompts or private tool output.
+    if (p.type === 'item_completed' && item?.type === 'McpToolCall' &&
+        typeof item.id === 'string' && item.id && typeof item.server === 'string' && item.server &&
+        typeof item.tool === 'string' && item.tool && !s.seen[item.id]) {
+      s.seen[item.id] = true;
+      const name = `${item.server}.${item.tool}`;
+      observation(s.used, name, at, evidence, { name, server: item.server, tool: item.tool });
+    }
     const status = { task_started: 'working', task_complete: 'done', turn_aborted: 'unknown' }[p.type];
     if (status) { s.status = status; s.statusAt = at; }
     return;

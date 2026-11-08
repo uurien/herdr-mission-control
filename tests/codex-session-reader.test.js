@@ -115,3 +115,16 @@ test('spawn-confirmed children without parent metadata cannot auto-link as ordin
   assert.deepEqual(result.associations.map(a=>a.sessionId),[]);
   assert.equal(result.candidates.find(c=>c.sessionId==='child').parentSessionId,'root');
 });
+
+test('rebuilds an old analyzer cache so historical MCP calls become visible without new log writes', async t => {
+  const {home,file}=await fixture(t);const cache=createReaderCache();
+  await writeFile(file('root'),lines([meta('root'),row('event_msg',{type:'item_completed',item:{
+    type:'McpToolCall',id:'mcp-call',server:'context7',tool:'query-docs',status:'completed',arguments:{},result:{},
+  }})]));
+  await readSnapshot({home,roots:['root'],cache});
+  cache.files[file('root')].state.version=1;
+  cache.files[file('root')].state.used={};
+  const upgraded=await readSnapshot({home,roots:['root'],cache});
+  assert.equal(upgraded.sessions[0].tools.used.find(t=>t.name==='context7.query-docs')?.count,1);
+  assert.ok(upgraded.stats.bytesRead>0);
+});
