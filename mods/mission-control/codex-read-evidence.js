@@ -89,26 +89,78 @@ export function skillReadPaths(cmd, cwd) {
   return paths;
 }
 
-export function unwrapResult(output) {
+export function unwrapResults(output) {
   if (Array.isArray(output)) {
-    const results = output.filter(x => x?.type === 'text').map(x => unwrapResult(x.text));
-    return results.find(x => x?.exit_code != null || x?.session_id != null || x?.agent_id || x?.id) ??
-      results.find(x => x?.cell_id) ?? null;
+    return output.flatMap(unwrapResults);
   }
-  if (output && typeof output === 'object') return output;
-  if (typeof output !== 'string') return null;
-  try { return unwrapResult(JSON.parse(output)); } catch { /* Native text envelopes below. */ }
+  if (output && typeof output === 'object') {
+    if (['text', 'input_text', 'output_text'].includes(output.type)) return unwrapResults(output.text);
+    if (output.status === 'fulfilled') return unwrapResults(output.value);
+    if (output.status === 'rejected') return [];
+    return [output];
+  }
+  if (typeof output !== 'string') return [];
+  try { return unwrapResults(JSON.parse(output)); } catch { /* Native text envelopes below. */ }
   const running = /Script running with cell ID\s+(\S+)/.exec(output);
-  if (running) return { cell_id: running[1] };
+  if (running) return [{ cell_id: running[1] }];
   const shell = /^.*?Process exited with code (\d+)\s*\n(?:Final output|Output):\s*\n([\s\S]*)$/s.exec(output);
-  if (shell) return { exit_code: Number(shell[1]), output: shell[2], truncated: /truncat/i.test(output.split(/(?:Final output|Output):/)[0]) };
-  return null;
+  if (shell) return [{ exit_code: Number(shell[1]), output: shell[2], truncated: /truncat/i.test(output.split(/(?:Final output|Output):/)[0]) }];
+  return [];
 }
 
-export function completeRead(result, maxTokens) {
+export function unwrapResult(output) {
+  const results = unwrapResults(output);
+  return results.find(x => x?.exit_code != null || x?.session_id != null || x?.agent_id || x?.id) ??
+    results.find(x => x?.cell_id) ?? null;
+}
+
+// Native successful && chains prove that every literal command ran. Keep shell
+// interpretation deliberately narrow; parsed_cmd alone does not prove execution.
+export function commandSkillPaths(item, fallbackCwd) {
+  const argv = item.command;
+  if (!Array.isArray(argv) || argv.length !== 3 ||
+      !['sh', 'bash', 'zsh', 'dash', 'ksh'].includes(path.basename(argv[0])) ||
+      !['-c', '-lc'].includes(argv[1]) || typeof argv[2] !== 'string') return [];
+  const commands = [[]];
+  let token = '', quote = null, started = false;
+  const push = () => { if (started) commands.at(-1).push(token); token = ''; started = false; };
+  const script = argv[2];
+  for (let i = 0; i < script.length; i++) {
+    const c = script[i];
+    if (quote) {
+      if (c === quote) quote = null;
+      else { if (c === '\\' || (quote === '"' && /[$`]/.test(c))) return []; token += c; }
+      started = true;
+    } else if (c === '"' || c === "'") { quote = c; started = true; }
+    else if (/[\n\r`$;|<>*?(){}\[\]\\#~]/.test(c)) return [];
+    else if (/\s/.test(c)) push();
+    else if (c === '&') {
+      if (script[++i] !== '&') return [];
+      push(); commands.push([]);
+    } else { token += c; started = true; }
+  }
+  if (quote) return [];
+  push();
+  const paths = [], cwd = item.cwd || fallbackCwd;
+  for (const args of commands) {
+    const executable = args[0];
+    if (!executable || !['cat', 'pwd', 'ls', 'rg', 'sed', 'head', 'tail', 'echo'].includes(path.basename(executable)) ||
+        (executable.includes('/') && !['/bin', '/usr/bin'].includes(path.dirname(executable)))) return [];
+    if (path.basename(executable) !== 'cat') continue;
+    const files = args.slice(args[1] === '--' ? 2 : 1);
+    if (!files.length || files.some(f => !f || f.startsWith('-'))) return [];
+    for (const file of files) if (path.basename(file) === 'SKILL.md') {
+      if (!path.isAbsolute(file) && !cwd) return [];
+      paths.push(path.resolve(cwd || '/', file));
+    }
+  }
+  return [...new Set(paths)];
+}
+
+export function completeRead(result, maxTokens, exactOutput = false) {
   if (!result || result.exit_code !== 0 || typeof result.output !== 'string' ||
       result.session_id != null || result.truncated || result.is_truncated || result.output_truncated) return false;
-  if (/truncated (?:output|content)|output (?:was |has been )?truncated|\.\.\.\s*\d+ (?:tokens|characters) truncated/i.test(result.output)) return false;
+  if (!exactOutput && /truncated (?:output|content)|output (?:was |has been )?truncated|\.\.\.\s*\d+ (?:tokens|characters) truncated/i.test(result.output)) return false;
   if (Number.isFinite(maxTokens) && result.original_token_count > maxTokens) return false;
   return true;
 }

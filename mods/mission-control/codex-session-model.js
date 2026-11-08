@@ -1,13 +1,15 @@
 import path from 'node:path';
-import { wrappedExec, skillReadPaths, unwrapResult, completeRead } from './codex-read-evidence.js';
+import { createHash } from 'node:crypto';
+import { wrappedExec, skillReadPaths, unwrapResult, unwrapResults, commandSkillPaths, completeRead } from './codex-read-evidence.js';
 
-export const SESSION_MODEL_VERSION = 2;
+export const SESSION_MODEL_VERSION = 3;
 
 export function createSessionState() {
   return { version: SESSION_MODEL_VERSION, identity: null, cwd: null, boundary: null, attribution: true,
     partial: false, diagnostics: [], declared: {}, used: {}, skills: {}, pending: {},
-    processes: {}, seen: {}, relations: {}, status: 'unknown', statusAt: null, line: 0 };
+    processes: {}, nativeReads: {}, nativeSeen: {}, seen: {}, relations: {}, status: 'unknown', statusAt: null, line: 0 };
 }
+const digest = output => createHash('sha256').update(output).digest('hex');
 const baseName = name => String(name || '').split('.').at(-1);
 const parseArgs = raw => { try { return typeof raw === 'string' ? JSON.parse(raw) : raw || {}; } catch { return {}; } };
 const mark = (s, code) => { s.partial = true; if (!s.diagnostics.includes(code)) s.diagnostics.push(code); };
@@ -79,6 +81,13 @@ export function consumeSessionEvent(s, row, evidence = null) {
   if (row.type === 'turn_context') { s.cwd = p.cwd || s.cwd; return; }
   if (row.type === 'event_msg') {
     const item = p.item;
+    if (p.type === 'item_completed' && item?.type === 'CommandExecution' &&
+        typeof item.id === 'string' && item.id && !s.nativeSeen[item.id] &&
+        item.status === 'completed' && completeRead({ ...item, output: item.aggregated_output }, undefined, true)) {
+      s.nativeSeen[item.id] = true;
+      const paths = commandSkillPaths(item, s.cwd);
+      if (paths.length) s.nativeReads[item.id] = { paths, digest: digest(item.aggregated_output), evidence };
+    }
     // Exec exposes real nested MCP calls as structured receipts, separate from response_item.
     // Read identity only: arguments/results may contain prompts or private tool output.
     if (p.type === 'item_completed' && item?.type === 'McpToolCall' &&
@@ -89,7 +98,7 @@ export function consumeSessionEvent(s, row, evidence = null) {
       observation(s.used, name, at, evidence, { name, server: item.server, tool: item.tool });
     }
     const status = { task_started: 'working', task_complete: 'done', turn_aborted: 'unknown' }[p.type];
-    if (status) { s.status = status; s.statusAt = at; }
+    if (status) { s.status = status; s.statusAt = at; s.nativeReads = {}; }
     return;
   }
   if (row.type !== 'response_item') return;
@@ -123,7 +132,25 @@ export function consumeSessionEvent(s, row, evidence = null) {
   if (p.type === 'function_call_output' || p.type === 'custom_tool_call_output') {
     const candidate = s.pending[p.call_id];
     delete s.pending[p.call_id];
-    finish(s, candidate, unwrapResult(p.output), at, evidence);
+    const confirmed = new Set();
+    for (const result of unwrapResults(p.output)) {
+      // Byte identity with the native aggregate distinguishes truncation markers
+      // from a skill that merely documents truncated output.
+      if (!completeRead(result, undefined, true)) continue;
+      const hash = digest(result.output);
+      const matches = Object.entries(s.nativeReads).filter(([, read]) => read.digest === hash);
+      // Equal contents do not identify which of several files was delivered.
+      const match = matches.find(([id]) => id === p.call_id) ?? (matches.length === 1 ? matches[0] : null);
+      if (!match) continue;
+      const [id, read] = match;
+      delete s.nativeReads[id];
+      for (const file of read.paths) {
+        confirmed.add(file);
+        observation(s.skills, file, at, read.evidence, { path: file, name: path.basename(path.dirname(file)) });
+      }
+    }
+    finish(s, candidate?.kind === 'read' ? { ...candidate,
+      paths: candidate.paths.filter(file => !confirmed.has(file)) } : candidate, unwrapResult(p.output), at, evidence);
   }
 }
 

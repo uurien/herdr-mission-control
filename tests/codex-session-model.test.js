@@ -166,3 +166,84 @@ test('direct call and MCP receipt sharing an id count once in either order', () 
     assert.equal(result.tools.used.reduce((n, t) => n + t.count, 0), 1);
   }
 });
+
+function commandReceipt(id, command, output, extra = {}) {
+  return event('event_msg', { type: 'item_completed', item: {
+    type: 'CommandExecution', id, command: ['/bin/zsh', '-lc', command], cwd: '/repo',
+    source: 'unified_exec_startup', status: 'completed', exit_code: 0,
+    aggregated_output: output, parsed_cmd: [], ...extra,
+  } });
+}
+function delivered(id, ...results) {
+  return event('response_item', { type: 'custom_tool_call_output', call_id: id,
+    output: [{ type: 'input_text', text: 'Script completed\nWall time 0.1 seconds' },
+      ...results.map(value => ({ type: 'input_text', text: JSON.stringify(value) }))] });
+}
+
+test('recognizes the input_text blocks actually persisted for a full skill read', () => {
+  const result = analyzeCodexSession([meta(), event('response_item', {
+    type: 'custom_tool_call', call_id: 'outer', name: 'exec',
+    input: 'text(await tools.exec_command({cmd:"cat /skills/real/SKILL.md"}));',
+  }), delivered('outer', ok('complete skill'))]);
+  assert.deepEqual(result.skills.map(s => s.path), ['/skills/real/SKILL.md']);
+});
+
+test('confirms native command receipts in a parallel wrapper only after full output is delivered', () => {
+  const rows = [meta(), event('response_item', { type: 'custom_tool_call', call_id: 'outer', name: 'exec', input: 'const r = await Promise.allSettled([tools.exec_command({}), tools.exec_command({})]); r.forEach(text);' }),
+    commandReceipt('read-one', 'cat /skills/first/SKILL.md && ls /repo', 'first full\nfiles\n'),
+    commandReceipt('read-two', "pwd && cat /skills/second/SKILL.md && rg -n 'one|two' README.md", '/repo\nsecond full\nmatch\n')];
+  assert.equal(analyzeCodexSession(rows).skills.length, 0);
+  rows.push(delivered('outer', { status: 'fulfilled', value: ok('first full\nfiles\n') },
+    { status: 'fulfilled', value: ok('/repo\nsecond full\nmatch\n') }));
+  const result = analyzeCodexSession(rows);
+  assert.deepEqual(result.skills.map(s => s.path), ['/skills/first/SKILL.md', '/skills/second/SKILL.md']);
+  assert.ok(!JSON.stringify(result).includes('second full'));
+});
+
+test('native reads reject failed, partial, nonexecuted, or undelivered skill evidence', () => {
+  const result = analyzeCodexSession([meta(),
+    commandReceipt('not-delivered', 'cat /skills/undelivered/SKILL.md', 'complete output'),
+    commandReceipt('failed', 'cat /skills/failed/SKILL.md', 'error', { exit_code: 1 }),
+    commandReceipt('partial', "sed -n '1,10p' /skills/partial/SKILL.md", 'first lines'),
+    commandReceipt('branch', 'cat /skills/branch/SKILL.md || cat /skills/not-run/SKILL.md', 'branch'),
+    commandReceipt('truncated', 'cat /skills/truncated/SKILL.md', 'the entire skill'),
+    delivered('outer', ok('error'), ok('first lines'), ok('branch'), ok('the entire')),
+  ]);
+  assert.deepEqual(result.skills, []);
+});
+
+test('native and wrapper evidence confirm one physical read once and respect inherited history', () => {
+  const result = analyzeCodexSession([meta('child', { parent_thread_id: 'root', subagent_history_start_ordinal: 4 }),
+    { ...commandReceipt('inherited', 'cat /skills/parent/SKILL.md', 'parent'), ordinal: 2 },
+    { ...event('response_item', { type: 'custom_tool_call', call_id: 'outer', name: 'exec',
+      input: 'text(await tools.exec_command({cmd:"cat /skills/own/SKILL.md"}));' }), ordinal: 4 },
+    { ...commandReceipt('own-read', 'cat /skills/own/SKILL.md', 'own'), ordinal: 5 },
+    { ...delivered('outer', ok('own')), ordinal: 6 },
+  ]);
+  assert.equal(result.skills.length, 1);
+  assert.equal(result.skills[0].path, '/skills/own/SKILL.md');
+  assert.equal(result.skills[0].count, 1);
+});
+
+test('native read receipts have independent ids and distinguish literal truncation text from flags', () => {
+  const content = 'This skill explains output truncated warnings.';
+  const rows = [meta(), call('same', 'exec_command', { cmd: 'cat /skills/real/SKILL.md && ls' }),
+    commandReceipt('same', 'cat /skills/real/SKILL.md && ls', content),
+    commandReceipt('flagged', 'cat /skills/flagged/SKILL.md', 'partial', { truncated: true }),
+    delivered('same', ok(content), ok('partial'))];
+  assert.deepEqual(analyzeCodexSession(rows).skills.map(s => s.path), ['/skills/real/SKILL.md']);
+});
+
+test('unmatched native receipts expire when the turn ends', () => {
+  const result = analyzeCodexSession([meta(),
+    commandReceipt('old', 'cat /skills/stale/SKILL.md', 'full'),
+    event('event_msg', { type: 'task_complete' }), delivered('later', ok('full'))]);
+  assert.deepEqual(result.skills, []);
+});
+
+test('identical pending outputs do not arbitrarily attribute a skill path', () => {
+  const rows = [meta(), commandReceipt('a', 'cat /skills/a/SKILL.md', 'same content'),
+    commandReceipt('b', 'cat /skills/b/SKILL.md', 'same content')];
+  assert.deepEqual(analyzeCodexSession([...rows, delivered('wrapper', ok('same content'))]).skills, []);
+  assert.deepEqual(analyzeCodexSession([...rows, delivered('b', ok('same content'))]).skills.map(s => s.path), ['/skills/b/SKILL.md']);
+});

@@ -128,3 +128,23 @@ test('rebuilds an old analyzer cache so historical MCP calls become visible with
   assert.equal(upgraded.sessions[0].tools.used.find(t=>t.name==='context7.query-docs')?.count,1);
   assert.ok(upgraded.stats.bytesRead>0);
 });
+
+test('rebuilds version two caches to recover complete native skill reads without new writes', async t => {
+  const { home, file } = await fixture(t); const cache = createReaderCache();
+  await writeFile(file('root'), lines([meta('root'), row('event_msg', {
+    type: 'item_completed', item: { type: 'CommandExecution', id: 'read-skill',
+      command: ['/bin/zsh', '-lc', 'cat /skills/real/SKILL.md && ls /repo'], cwd: '/repo',
+      status: 'completed', exit_code: 0, aggregated_output: 'PRIVATE FULL SKILL\nfiles\n' },
+  }), row('response_item', { type: 'custom_tool_call_output', call_id: 'outer', output: [
+    { type: 'input_text', text: JSON.stringify({ status: 'fulfilled', value: {
+      exit_code: 0, output: 'PRIVATE FULL SKILL\nfiles\n',
+    } }) },
+  ] }, 2)]));
+  await readSnapshot({ home, roots: ['root'], cache });
+  cache.files[file('root')].state.version = 2;
+  cache.files[file('root')].state.skills = {};
+  const upgraded = await readSnapshot({ home, roots: ['root'], cache });
+  assert.deepEqual(upgraded.sessions[0].skills.map(s => s.path), ['/skills/real/SKILL.md']);
+  assert.ok(upgraded.stats.bytesRead > 0);
+  assert.ok(!JSON.stringify({ cache, upgraded }).includes('PRIVATE FULL SKILL'));
+});

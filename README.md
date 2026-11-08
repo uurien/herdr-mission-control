@@ -53,8 +53,13 @@ kept separately for each agent and list while the panel stays open.
 
 Supported skill evidence includes literal `cat` reads, including chains of `cat` joined with `&&`,
 through recorded `exec_command` calls. A single literal `text(await tools.exec_command({...}));`
-wrapper is also supported. Scripts with dynamic commands, arbitrary JavaScript, pipelines and
-partial output across process polls are not inferred to be full reads. Truncated output is rejected.
+wrapper is also supported. Native command receipts recover reads inside parallel or multi-call
+wrappers when the successful command's full output matches the delivered output by SHA-256.
+Literal `&&` chains can include `cat`, `pwd`, `ls`, `rg`, `sed`, `head`, `tail` and `echo`;
+only complete `cat` reads confirm skill loads. Text blocks and fulfilled parallel-result envelopes
+are recognized. Hashes and paths are retained, without command output or skill contents.
+Scripts with dynamic commands, arbitrary JavaScript, pipelines, range reads and partial output
+across process polls are not inferred to be full reads. Truncated output is rejected.
 Other reading methods can be added once their full-read evidence has been verified.
 
 Inherited history does not count as the child's own calls or skill loads. If the record lacks a
