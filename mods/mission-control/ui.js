@@ -1,5 +1,6 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
+import { codexDetail } from "./codex-detail.js";
 
 export const STATUS = {
   working: { label: "Trabajando", color: "working" },
@@ -19,8 +20,8 @@ export function statusBadge(status, colors) {
 }
 
 export function agentRow(agent, selected, onSelect, colors) {
-  const name = agent.providerName || agent.name;
-  const secondary = [agent.terminal, agent.tab?.name].filter(Boolean).join(" · ");
+  const name = agent.isInternal ? agent.name : agent.providerName || agent.name;
+  const secondary = [agent.terminal || agent.sessionId, agent.tab?.name].filter(Boolean).join(" · ");
   return div().pl(Math.min(agent.depth, 6) * 18).w_full().child(
     v_flex().id(`agent-${agent.id}`).p(12).gap(6).rounded(8)
       .bg(selected ? colors.selected : colors.background)
@@ -32,6 +33,8 @@ export function agentRow(agent, selected, onSelect, colors) {
       .child(div().text_size(12).text_color(colors.muted)
         .child(agent.title || "Sin título comunicado"))
       .child(div().text_size(11).text_color(colors.dim).child(secondary))
+      .when(agent.isInternal, element => element.child(div().text_size(11).text_color(colors.muted)
+        .child("Subagente Codex · Estado observado en el registro")))
       .when(agent.isHelper, element => element.child(
         div().text_size(11).text_color(colors.muted)
           .child(agent.unresolvedParent ? "Helper · padre no resuelto" : `Helper de ${agent.parentId}`))),
@@ -54,7 +57,7 @@ function tabActivity(agent) {
   return `Trabajando desde hace ${Math.floor(minutes / 60)} h ${minutes % 60} min`;
 }
 
-export function agentDetail(agent, model, colors, onOpen, wide) {
+export function agentDetail(agent, model, colors, onOpen, wide, codexOptions = {}) {
   let panel = v_flex().gap(20).p(22).bg(colors.chrome).flex_none();
   panel = wide
     ? panel.w(320).min_h(0).overflow_y_scrollbar().border_l(1).border_color(colors.border)
@@ -65,22 +68,28 @@ export function agentDetail(agent, model, colors, onOpen, wide) {
   return panel
     .child(v_flex().gap(8)
       .child(div().text_size(11).text_color(colors.muted).child("AGENTE SELECCIONADO"))
-      .child(div().text_size(19).child(agent.providerName || agent.name))
-      .child(statusBadge(agent.status, colors)))
+      .child(div().text_size(19).child(agent.isInternal ? agent.name : agent.providerName || agent.name))
+      .child(statusBadge(agent.status, colors))
+      .when(agent.historicalStatus, p => p.child(div().text_size(11).text_color(colors.muted)
+        .child(`Estado observado · ${agent.statusObservedAt || "Sin fecha"}`))))
     .child(field("Título comunicado", agent.title, colors))
     .child(field("Terminal", agent.terminal, colors))
     .child(field("Pestaña de origen", agent.tab?.name, colors))
-    .when(Boolean(parent), p => p.child(field("Agente padre", `${parent.providerName || parent.name} · ${parent.terminal}`, colors)))
+    .when(Boolean(parent), p => p.child(field("Agente padre", parent.name || parent.providerName || parent.id, colors)))
+    .when(Boolean(parent) && Boolean(codexOptions.onSelect), p => p.child(div().id("select-agent-parent")
+      .px(10).py(7).rounded(6).bg(colors.surface).cursor_pointer().text_size(12)
+      .on_click((_e, cx) => codexOptions.onSelect(parent.id, cx)).child("Ver agente padre")))
     .when(agent.unresolvedParent, p => p.child(field("Agente padre", "No resuelto por Herdr", colors)))
-    .when(children.length > 0, p => p.child(field("Helpers registrados", children.map(a => a.terminal).join(", "), colors)))
+    .when(children.length > 0, p => p.child(field("Helpers y subagentes", children.map(a => a.terminal || a.name || a.id).join(", "), colors)))
     .child(field("Proceso actual", agent.process, colors))
     .child(field("Directorio del proceso", agent.cwd, colors))
     .child(field("Actividad del tab", tabActivity(agent), colors))
-    .child(div().id("open-agent-terminal").px(12).py(9).rounded(6)
+    .when(agent.provider === "codex", p => p.child(codexDetail(agent, colors, codexOptions)))
+    .when(Boolean(agent.terminal), p => p.child(div().id("open-agent-terminal").px(12).py(9).rounded(6)
       .bg(colors.surface).text_size(12).cursor_pointer()
       .hover(style => style.bg(colors.hover))
       .on_click(() => onOpen(agent))
-      .child("Ver terminal en Herdr"));
+      .child("Ver terminal en Herdr")));
 }
 
 export function notice(title, description, colors) {
