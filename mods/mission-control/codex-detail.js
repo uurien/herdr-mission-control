@@ -112,12 +112,24 @@ export function codexDetail(agent, colors, options = {}) {
   used.child(toolGroups(agent, 'used', data.tools.used, colors, options));
   if (!data.tools.used.length) used.child(div().text_size(12).text_color(colors.muted).child('Sin llamadas confirmadas en el historial analizado.'));
   root.child(used);
-  const skills = section('Skills cargadas', colors);
-  for (const skill of data.skills) skills.child(v_flex().gap(3)
-    .child(div().text_size(13).child(`${skill.name} · ${skill.count} lectura(s)`))
-    .child(div().text_size(11).text_color(colors.muted).child(skill.path))
-    .child(div().text_size(10).text_color(colors.muted).child(`Primera: ${dateLabel(skill.firstObservedAt)}`))
-    .child(div().text_size(10).text_color(colors.muted).child(`Última: ${dateLabel(skill.lastObservedAt)}`)));
+  const skills = section(`Skills cargadas · ${data.skills.length}`, colors);
+  for (const skill of data.skills) {
+    const key = JSON.stringify([agent.id, skill.path]);
+    const expanded = Boolean(options.expandedSkills?.[key]);
+    const row = v_flex().gap(6).min_w(0)
+      .child(h_flex().id(`skill:${key}`).py(9).gap(8).items_center().min_w(0)
+        .cursor_pointer().hover(s => s.bg(colors.hover))
+        .on_click((_event, cx) => options.onToggleSkill?.(key, cx))
+        .child(div().text_size(11).text_color(colors.muted).child(expanded ? '▾' : '▸'))
+        .child(div().flex_1().min_w(0).text_size(12).child(skill.name))
+        .child(div().flex_none().text_size(11).text_color(colors.muted)
+          .child(`${skill.count} ${skill.count === 1 ? 'lectura' : 'lecturas'}`)));
+    if (expanded) row.child(v_flex().pl(18).pb(10).gap(4).min_w(0)
+      .child(div().text_size(11).text_color(colors.muted).child(skill.path))
+      .child(div().text_size(11).text_color(colors.muted).child(`Primera: ${dateLabel(skill.firstObservedAt)}`))
+      .child(div().text_size(11).text_color(colors.muted).child(`Última: ${dateLabel(skill.lastObservedAt)}`)));
+    skills.child(row);
+  }
   if (!data.skills.length) skills.child(div().text_size(12).text_color(colors.muted)
     .child('Sin cargas confirmadas en el historial analizado.'));
   return root.child(skills);

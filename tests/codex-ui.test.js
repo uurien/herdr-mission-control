@@ -91,3 +91,30 @@ test('provider groups collapse long tool lists and expand without mixing declare
   findById(open, `tool-group:${usedKey}`).click({}, {});
   assert.ok(!textOf(render()).includes('query-docs'));
 });
+
+test('skill rows hide metadata and expand independently by agent and full path', () => {
+  const first = { name: 'same-name', path: '/project/skills/same-name/SKILL.md', count: 1,
+    firstObservedAt: '2026-11-07T14:34:00.000Z', lastObservedAt: '2026-11-07T14:34:00.000Z' };
+  const second = { ...first, path: '/personal/skills/same-name/SKILL.md', count: 2 };
+  const root = { id: 'root', sessionId: 'thread', provider: 'codex', sessionData: {
+    ...data, skills: [first, second],
+  } };
+  const expandedSkills = {};
+  const options = { expandedSkills, onToggleSkill: key => { expandedSkills[key] = !expandedSkills[key]; } };
+  const render = (agent = root) => ui.agentDetail(agent, { agents: [agent] }, colors, () => {}, true, options);
+  const closed = render();
+  assert.ok(textOf(closed).includes('1 lectura'));
+  assert.ok(textOf(closed).includes('2 lecturas'));
+  assert.ok(!textOf(closed).includes('lectura(s)'));
+  assert.ok(!textOf(closed).includes(first.path));
+  assert.ok(!textOf(closed).includes('Primera:'));
+  const key = JSON.stringify(['root', first.path]);
+  findById(closed, `skill:${key}`).click({}, {});
+  const opened = render();
+  assert.ok(textOf(opened).includes(first.path));
+  assert.ok(textOf(opened).includes('2026-11-07 14:34:00 UTC'));
+  assert.ok(!textOf(opened).includes(second.path));
+  assert.ok(!textOf(render({ ...root, id: 'child' })).includes(first.path));
+  findById(opened, `skill:${key}`).click({}, {});
+  assert.ok(!textOf(render()).includes(first.path));
+});
