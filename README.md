@@ -50,6 +50,9 @@ Both tool lists are grouped into collapsible provider sections, such as Playwrig
 Colaboración and Funciones. Headers show distinct tool totals and, for used tools, total calls.
 Expand a provider to see local tool names, individual counts and last-call times. Expansion is
 kept separately for each agent and list while the panel stays open.
+Skills use compact collapsible rows: the name and read count stay visible, while the full path
+and first/last read timestamps appear on expansion. Expansion is independent for each agent and
+skill path, including skills with the same name installed in different directories.
 
 Supported skill evidence includes literal `cat` reads, including chains of `cat` joined with `&&`,
 through recorded `exec_command` calls. A single literal `text(await tools.exec_command({...}));`
