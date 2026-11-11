@@ -26,6 +26,7 @@ export default class MissionControl extends View {
     this.pickerPages = 1;
     this.pickerLoading = false;
     this.expandedToolGroups = {};
+    this.expandedSkills = {};
     this.watchRoot = null;
     this.watching = false;
     this.fileWatching = false;
@@ -315,6 +316,11 @@ export default class MissionControl extends View {
         page: this.pickerPage, pages: this.pickerPages, pickerLoading: this.pickerLoading,
         linkError: this.linkError,
         expandedToolGroups: this.expandedToolGroups,
+        expandedSkills: this.expandedSkills,
+        onToggleSkill: (key, cx) => {
+          this.expandedSkills[key] = !this.expandedSkills[key];
+          cx.notify();
+        },
         onToggleToolGroup: (key, cx) => {
           this.expandedToolGroups[key] = !this.expandedToolGroups[key];
           cx.notify();
